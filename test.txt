@@ -1,1 +1,2 @@
-test
+snyk-test
+password = "123456"
