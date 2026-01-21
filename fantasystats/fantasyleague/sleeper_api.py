@@ -86,6 +86,20 @@ def get_league_rosters(league_id: str) -> List[Dict]:
         return []
 
 
+def get_players() -> Dict:
+    """
+    Fetch all NFL players from Sleeper API.
+    Note: This should be cached as it's a large dataset (~5MB).
+    """
+    try:
+        response = requests.get(f"{SLEEPER_API_BASE}/players/nfl", timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except (requests.RequestException, ValueError) as e:
+        print(f"Error fetching players: {e}")
+        return {}
+
+
 def get_team_avatar_url(avatar_id: str, thumbnail: bool = True) -> str:
     """
     Build the Sleeper CDN URL for a team's or user's avatar.
@@ -210,3 +224,48 @@ def get_league_teams(league_id: str) -> List[Dict]:
         teams.sort(key=lambda x: x['team_name'])
     
     return teams
+
+
+def get_team_by_roster_id(league_id: str, roster_id: int) -> Optional[Dict]:
+    """Get a specific team's information by roster_id"""
+    if not league_id or roster_id is None:
+        return None
+    
+    teams = get_league_teams(league_id)
+    for team in teams:
+        if team.get('roster_id') == roster_id:
+            return team
+    return None
+
+
+def get_roster_players(league_id: str, roster_id: int) -> List[Dict]:
+    """Get the current roster players for a specific roster"""
+    if not league_id or roster_id is None:
+        return []
+    
+    rosters = get_league_rosters(league_id)
+    for roster in rosters:
+        if roster.get('roster_id') == roster_id:
+            player_ids = roster.get('players', [])
+            starters = roster.get('starters', [])
+            reserve = roster.get('reserve', [])
+            
+            # Fetch player data
+            players_data = get_players()
+            
+            roster_players = []
+            for player_id in player_ids:
+                player_info = players_data.get(str(player_id), {})
+                if player_info:
+                    roster_players.append({
+                        'player_id': player_id,
+                        'name': f"{player_info.get('first_name', '')} {player_info.get('last_name', '')}".strip(),
+                        'position': player_info.get('position', ''),
+                        'team': player_info.get('team', ''),
+                        'is_starter': player_id in starters,
+                        'is_reserve': player_id in reserve,
+                    })
+            
+            return roster_players
+    
+    return []
