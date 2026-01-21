@@ -6,7 +6,14 @@ from .sleeper_api import get_league_teams
 
 
 def index(request):
-    """Main dashboard showing overview stats"""
+    """
+    Render the main dashboard with aggregated league overview statistics.
+    
+    Builds context containing total teams, total seasons, latest season, top teams by cumulative points, and recent champions, then renders the 'fantasyleague/index.html' template.
+    
+    Returns:
+        HttpResponse: Rendered dashboard page with the computed context.
+    """
     total_teams = Teams.objects.count()
     total_seasons = TeamRanking.objects.values('season').distinct().count()
     
@@ -34,7 +41,17 @@ def index(request):
 
 
 def team_list(request):
-    """Display all available fantasy league teams for selection"""
+    """
+    Builds and renders the team selection page by merging current Sleeper league data with historical database statistics and grouping teams by division.
+    
+    Fetches league teams from the configured Sleeper league (if present), augments each team with aggregated historical stats from the local database (wins, losses, championships, best rank, seasons played), and groups the combined team records by division when divisions are present. Safe fallbacks are used when league configuration, Sleeper fields, or database records are missing; team entries include a `has_db_record` flag and a `team_id` suitable for linking to the team detail page.
+    
+    Returns:
+        HttpResponse: Rendered 'fantasyleague/team_list.html' response with context keys:
+            - teams_with_stats: list of combined team dictionaries with current and historical stats
+            - teams_by_division: mapping of division name to list of teams (or {'All Teams': [...]})
+            - has_divisions: boolean indicating whether divisions were detected
+    """
     league_id = settings.SLEEPER_LEAGUE_ID
     
     # Fetch teams from Sleeper API
