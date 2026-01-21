@@ -10,7 +10,12 @@ SLEEPER_API_BASE = "https://api.sleeper.app/v1"
 
 
 def get_league_info(league_id: str) -> Optional[Dict]:
-    """Fetch league information from Sleeper API"""
+    """
+    Retrieve league metadata for the given Sleeper league identifier.
+    
+    Returns:
+        dict: Parsed league JSON on success, or `None` if `league_id` is falsy or the request or JSON parsing fails.
+    """
     if not league_id:
         return None
     
@@ -24,7 +29,12 @@ def get_league_info(league_id: str) -> Optional[Dict]:
 
 
 def get_league_users(league_id: str) -> List[Dict]:
-    """Fetch all users in a league from Sleeper API"""
+    """
+    Fetch all users in a Sleeper league.
+    
+    Returns:
+        List[Dict]: List of user objects returned by the Sleeper API. Returns an empty list if `league_id` is falsy or if a request/parse error occurs.
+    """
     if not league_id:
         return []
     
@@ -38,7 +48,12 @@ def get_league_users(league_id: str) -> List[Dict]:
 
 
 def get_league_rosters(league_id: str) -> List[Dict]:
-    """Fetch all rosters in a league from Sleeper API"""
+    """
+    Fetch all rosters for the given league from the Sleeper API.
+    
+    Returns:
+        List[Dict]: A list of roster objects parsed from the API response. Returns an empty list if `league_id` is falsy or if the request or response parsing fails.
+    """
     if not league_id:
         return []
     
@@ -52,7 +67,16 @@ def get_league_rosters(league_id: str) -> List[Dict]:
 
 
 def get_team_avatar_url(avatar_id: str, thumbnail: bool = True) -> str:
-    """Get the avatar URL for a team/user"""
+    """
+    Build the Sleeper CDN URL for a team's or user's avatar.
+    
+    Parameters:
+        avatar_id (str): Sleeper avatar identifier.
+        thumbnail (bool): If True, return the thumbnail URL; otherwise return the full-size URL.
+    
+    Returns:
+        str: The avatar URL, or an empty string if `avatar_id` is empty.
+    """
     if not avatar_id:
         return ""
     
@@ -63,17 +87,16 @@ def get_team_avatar_url(avatar_id: str, thumbnail: bool = True) -> str:
 
 def get_league_teams(league_id: str) -> List[Dict]:
     """
-    Fetch and combine league users and rosters to get team information.
-    Returns a list of team dictionaries with:
-    - user_id
-    - username
-    - display_name
-    - team_name (from metadata)
-    - avatar
-    - avatar_url
-    - roster_id
-    - division (if available)
-    - wins, losses, ties, fpts (from roster settings)
+    Assemble team entries for a Sleeper league by combining league users and rosters.
+    
+    Each returned team dictionary contains metadata for a single roster, including:
+    `user_id`, `username`, `display_name`, `team_name`, `avatar`, `avatar_url`,
+    `roster_id`, `division` (if available), `wins`, `losses`, `ties`, `fpts`,
+    `fpts_decimal`, and `total_points` (calculated as `fpts + fpts_decimal/100`).
+    
+    Returns:
+        teams (List[Dict]): A list of team dictionaries described above; empty if
+        `league_id` is falsy or data cannot be retrieved.
     """
     if not league_id:
         return []
