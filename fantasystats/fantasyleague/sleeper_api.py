@@ -9,6 +9,26 @@ from typing import Dict, List, Optional
 SLEEPER_API_BASE = "https://api.sleeper.app/v1"
 
 
+def safe_int(value, default=0):
+    """Safely convert a value to int, returning default if conversion fails or value is None"""
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def safe_float(value, default=0.0):
+    """Safely convert a value to float, returning default if conversion fails or value is None"""
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
 def get_league_info(league_id: str) -> Optional[Dict]:
     """Fetch league information from Sleeper API"""
     if not league_id:
@@ -127,6 +147,21 @@ def get_league_teams(league_id: str) -> List[Dict]:
                 except (ValueError, TypeError):
                     pass
         
+        # Safely extract and convert numeric values from roster settings
+        # Explicitly handle None values - .get() with defaults only protects against missing keys, not None
+        settings = roster.get('settings', {}) or {}
+        
+        # Get raw values - these may be None even if keys exist
+        fpts_raw = settings.get('fpts')
+        fpts_decimal_raw = settings.get('fpts_decimal')
+        
+        # Explicitly convert to float, handling None and non-numeric types
+        fpts = safe_float(fpts_raw, 0.0)
+        fpts_decimal = safe_float(fpts_decimal_raw, 0.0)
+        
+        # Calculate total points with explicit type conversion
+        total_points = fpts + (fpts_decimal / 100.0)
+        
         team_data = {
             'user_id': user_id,
             'username': user.get('username', ''),
@@ -136,12 +171,12 @@ def get_league_teams(league_id: str) -> List[Dict]:
             'avatar_url': get_team_avatar_url(user.get('avatar', '')),
             'roster_id': roster.get('roster_id'),
             'division': division,
-            'wins': roster.get('settings', {}).get('wins', 0),
-            'losses': roster.get('settings', {}).get('losses', 0),
-            'ties': roster.get('settings', {}).get('ties', 0),
-            'fpts': roster.get('settings', {}).get('fpts', 0),
-            'fpts_decimal': roster.get('settings', {}).get('fpts_decimal', 0),
-            'total_points': roster.get('settings', {}).get('fpts', 0) + (roster.get('settings', {}).get('fpts_decimal', 0) / 100),
+            'wins': safe_int(settings.get('wins'), 0),
+            'losses': safe_int(settings.get('losses'), 0),
+            'ties': safe_int(settings.get('ties'), 0),
+            'fpts': fpts,
+            'fpts_decimal': fpts_decimal,
+            'total_points': total_points,
         }
         teams.append(team_data)
     

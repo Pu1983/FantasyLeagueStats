@@ -164,42 +164,8 @@ main {
     color: #3498db;
 }
 
-.team-logo {
-    text-align: center;
-    margin-bottom: 1rem;
-}
-
-.team-avatar {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 3px solid #3498db;
-    background-color: #ecf0f1;
-}
-
-.team-owner {
-    color: #7f8c8d;
-    font-size: 0.9rem;
-    margin-bottom: 0.5rem;
-    font-style: italic;
-}
-
 .team-stats {
     margin-bottom: 1rem;
-}
-
-/* Division Sections */
-.division-section {
-    margin-bottom: 3rem;
-}
-
-.division-title {
-    color: #2c3e50;
-    font-size: 1.5rem;
-    margin-bottom: 1.5rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 3px solid #3498db;
 }
 
 .stat-item {
