@@ -6,37 +6,133 @@
 <div class="team-list">
     <h1>Fantasy League Teams</h1>
     
-    <div class="teams-grid">
-        {% for team_stat in teams_with_stats %}
-        <div class="team-card">
-            <h2><a href="{% url 'fantasyleague:team_detail' team_stat.team.team_id %}">{{ team_stat.team.team_name }}</a></h2>
-            <div class="team-stats">
-                <div class="stat-item">
-                    <span class="stat-label">Wins:</span>
-                    <span class="stat-value">{{ team_stat.total_wins }}</span>
+    {% if has_divisions %}
+        {% for division, teams in teams_by_division.items %}
+        <section class="division-section">
+            <h2 class="division-title">{{ division }}</h2>
+            <div class="teams-grid">
+                {% for team_stat in teams %}
+                <div class="team-card">
+                    {% if team_stat.avatar_url %}
+                    <div class="team-logo">
+                        <img src="{{ team_stat.avatar_url }}" alt="{{ team_stat.team_name }} logo" class="team-avatar">
+                    </div>
+                    {% endif %}
+                    <h2>{{ team_stat.team_name }}</h2>
+                    {% if team_stat.display_name and team_stat.display_name != team_stat.team_name %}
+                    <p class="team-owner">Owner: {{ team_stat.display_name }}</p>
+                    {% endif %}
+                    <div class="team-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">Current Record:</span>
+                            <span class="stat-value">{{ team_stat.current_wins }}-{{ team_stat.current_losses }}{% if team_stat.current_ties %}-{{ team_stat.current_ties }}{% endif %}</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Current Points:</span>
+                            <span class="stat-value">{{ team_stat.current_points|floatformat:2 }}</span>
+                        </div>
+                        {% if team_stat.total_wins > 0 or team_stat.total_losses > 0 %}
+                        <div class="stat-item">
+                            <span class="stat-label">All-Time Wins:</span>
+                            <span class="stat-value">{{ team_stat.total_wins }}</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">All-Time Losses:</span>
+                            <span class="stat-value">{{ team_stat.total_losses }}</span>
+                        </div>
+                        {% endif %}
+                        {% if team_stat.championships > 0 %}
+                        <div class="stat-item">
+                            <span class="stat-label">Championships:</span>
+                            <span class="stat-value">{{ team_stat.championships }}</span>
+                        </div>
+                        {% endif %}
+                        {% if team_stat.best_rank > 0 %}
+                        <div class="stat-item">
+                            <span class="stat-label">Best Rank:</span>
+                            <span class="stat-value">#{{ team_stat.best_rank }}</span>
+                        </div>
+                        {% endif %}
+                        {% if team_stat.seasons_played > 0 %}
+                        <div class="stat-item">
+                            <span class="stat-label">Seasons:</span>
+                            <span class="stat-value">{{ team_stat.seasons_played }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% if team_stat.team_id %}
+                    <a href="{% url 'fantasyleague:team_detail' team_stat.team_id %}" class="btn btn-secondary">View Details</a>
+                    {% else %}
+                    <span class="btn btn-secondary" style="opacity: 0.5; cursor: not-allowed;">No Historical Data</span>
+                    {% endif %}
                 </div>
-                <div class="stat-item">
-                    <span class="stat-label">Losses:</span>
-                    <span class="stat-value">{{ team_stat.total_losses }}</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Championships:</span>
-                    <span class="stat-value">{{ team_stat.championships }}</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Best Rank:</span>
-                    <span class="stat-value">#{{ team_stat.best_rank }}</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Seasons:</span>
-                    <span class="stat-value">{{ team_stat.seasons_played }}</span>
-                </div>
+                {% endfor %}
             </div>
-            <a href="{% url 'fantasyleague:team_detail' team_stat.team.team_id %}" class="btn btn-secondary">View Details</a>
-        </div>
-        {% empty %}
-        <p>No teams found. Please add teams through the admin interface.</p>
+        </section>
         {% endfor %}
-    </div>
+    {% else %}
+        <div class="teams-grid">
+            {% for team_stat in teams_with_stats %}
+            <div class="team-card">
+                {% if team_stat.avatar_url %}
+                <div class="team-logo">
+                    <img src="{{ team_stat.avatar_url }}" alt="{{ team_stat.team_name }} logo" class="team-avatar">
+                </div>
+                {% endif %}
+                <h2>{{ team_stat.team_name }}</h2>
+                {% if team_stat.display_name and team_stat.display_name != team_stat.team_name %}
+                <p class="team-owner">Owner: {{ team_stat.display_name }}</p>
+                {% endif %}
+                <div class="team-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Current Record:</span>
+                        <span class="stat-value">{{ team_stat.current_wins }}-{{ team_stat.current_losses }}{% if team_stat.current_ties %}-{{ team_stat.current_ties }}{% endif %}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Current Points:</span>
+                        <span class="stat-value">{{ team_stat.current_points|floatformat:2 }}</span>
+                    </div>
+                    {% if team_stat.total_wins > 0 or team_stat.total_losses > 0 %}
+                    <div class="stat-item">
+                        <span class="stat-label">All-Time Wins:</span>
+                        <span class="stat-value">{{ team_stat.total_wins }}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">All-Time Losses:</span>
+                        <span class="stat-value">{{ team_stat.total_losses }}</span>
+                    </div>
+                    {% endif %}
+                    {% if team_stat.championships > 0 %}
+                    <div class="stat-item">
+                        <span class="stat-label">Championships:</span>
+                        <span class="stat-value">{{ team_stat.championships }}</span>
+                    </div>
+                    {% endif %}
+                    {% if team_stat.best_rank > 0 %}
+                    <div class="stat-item">
+                        <span class="stat-label">Best Rank:</span>
+                        <span class="stat-value">#{{ team_stat.best_rank }}</span>
+                    </div>
+                    {% endif %}
+                    {% if team_stat.seasons_played > 0 %}
+                    <div class="stat-item">
+                        <span class="stat-label">Seasons:</span>
+                        <span class="stat-value">{{ team_stat.seasons_played }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if team_stat.team_id %}
+                <a href="{% url 'fantasyleague:team_detail' team_stat.team_id %}" class="btn btn-secondary">View Details</a>
+                {% elif team_stat.has_db_record %}
+                <a href="{% url 'fantasyleague:team_detail' team_stat.team_id %}" class="btn btn-secondary">View Details</a>
+                {% else %}
+                <span class="btn btn-secondary" style="opacity: 0.5; cursor: not-allowed;">No Historical Data</span>
+                {% endif %}
+            </div>
+            {% empty %}
+            <p>No teams found. Please check your SLEEPER_LEAGUE_ID configuration.</p>
+            {% endfor %}
+        </div>
+    {% endif %}
 </div>
 {% endblock %}
