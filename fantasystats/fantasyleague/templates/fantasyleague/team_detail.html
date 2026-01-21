@@ -1,0 +1,128 @@
+{% extends 'fantasyleague/base.html' %}
+
+{% block title %}{{ team.team_name }} - Fantasy League Stats{% endblock %}
+
+{% block content %}
+<div class="team-detail">
+    <h1>{{ team.team_name }}</h1>
+    
+    <div class="team-header">
+        <div class="team-info">
+            <h2>Team Overview</h2>
+            <div class="overview-stats">
+                <div class="stat-box">
+                    <span class="stat-label">Total Wins</span>
+                    <span class="stat-value-large">{{ total_wins }}</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Total Losses</span>
+                    <span class="stat-value-large">{{ total_losses }}</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Championships</span>
+                    <span class="stat-value-large">{{ championships }}</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Playoff Appearances</span>
+                    <span class="stat-value-large">{{ playoff_appearances }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <section class="section">
+        <h2>Season Rankings</h2>
+        <div class="rankings-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Season</th>
+                        <th>Rank</th>
+                        <th>Wins</th>
+                        <th>Losses</th>
+                        <th>Ties</th>
+                        <th>Total Points</th>
+                        <th>Avg Points</th>
+                        <th>Achievements</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ranking in rankings %}
+                    <tr>
+                        <td>{{ ranking.season }}</td>
+                        <td><strong>#{{ ranking.rank }}</strong></td>
+                        <td>{{ ranking.wins }}</td>
+                        <td>{{ ranking.losses }}</td>
+                        <td>{{ ranking.ties }}</td>
+                        <td>{{ ranking.total_points|floatformat:2 }}</td>
+                        <td>{{ ranking.average_points|floatformat:2 }}</td>
+                        <td>
+                            {% if ranking.championship %}
+                                <span class="badge badge-gold">Champion</span>
+                            {% endif %}
+                            {% if ranking.playoff_appearance %}
+                                <span class="badge badge-blue">Playoffs</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8">No rankings data available.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    
+    <section class="section">
+        <h2>Achievements & Records</h2>
+        <div class="achievements-grid">
+            <div class="achievement-card">
+                <h3>Best Season Rank</h3>
+                <p class="achievement-value">#{{ best_rank }}</p>
+            </div>
+            <div class="achievement-card">
+                <h3>Total Championships</h3>
+                <p class="achievement-value">{{ championships }}</p>
+            </div>
+            <div class="achievement-card">
+                <h3>Playoff Appearances</h3>
+                <p class="achievement-value">{{ playoff_appearances }}</p>
+            </div>
+        </div>
+    </section>
+    
+    <section class="section">
+        <h2>Highest Scores</h2>
+        <div class="scores-grid">
+            {% if highest_match %}
+            <div class="score-card">
+                <h3>Highest Match Score</h3>
+                <p class="score-value">{{ highest_match_score|floatformat:2 }} points</p>
+                <p class="score-details">
+                    Season {{ highest_match.season }}, Week {{ highest_match.week }}<br>
+                    vs. {% if highest_match.team1 == team %}{{ highest_match.team2.team_name }}{% else %}{{ highest_match.team1.team_name }}{% endif %}
+                </p>
+            </div>
+            {% endif %}
+            
+            {% if highest_player_score %}
+            <div class="score-card">
+                <h3>Highest Individual Player Score</h3>
+                <p class="score-value">{{ highest_player_score.fantasy_points|floatformat:2 }} points</p>
+                <p class="score-details">
+                    {{ highest_player_score.player_name }}<br>
+                    Season {{ highest_player_score.matchup.season }}, Week {{ highest_player_score.matchup.week }}
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </section>
+    
+    <div class="action-links">
+        <a href="{% url 'fantasyleague:team_insights' team.team_id %}" class="btn btn-primary">View Team Insights</a>
+        <a href="{% url 'fantasyleague:team_list' %}" class="btn btn-secondary">Back to Teams</a>
+    </div>
+</div>
+{% endblock %}

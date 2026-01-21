@@ -1,0 +1,43 @@
+{% extends 'fantasyleague/base.html' %}
+
+{% block title %}Dashboard - Fantasy League Stats{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h1>Fantasy League Dashboard</h1>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Total Teams</h3>
+            <p class="stat-number">{{ total_teams }}</p>
+        </div>
+        <div class="stat-card">
+            <h3>Total Seasons</h3>
+            <p class="stat-number">{{ total_seasons }}</p>
+        </div>
+        <div class="stat-card">
+            <h3>Latest Season</h3>
+            <p class="stat-number">{{ latest_season|default:"N/A" }}</p>
+        </div>
+    </div>
+    
+    {% if recent_champions %}
+    <section class="section">
+        <h2>Recent Champions</h2>
+        <div class="champions-list">
+            {% for champion in recent_champions %}
+            <div class="champion-card">
+                <h3>{{ champion.team.team_name }}</h3>
+                <p>Season {{ champion.season }}</p>
+                <span class="badge badge-gold">Champion</span>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+    
+    <div class="quick-links">
+        <a href="{% url 'fantasyleague:team_list' %}" class="btn btn-primary">View All Teams</a>
+    </div>
+</div>
+{% endblock %}
