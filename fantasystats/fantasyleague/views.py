@@ -1,10 +1,19 @@
 from django.shortcuts import render, get_object_or_404
 from django.db.models import Max, Min, Sum, Q, Count, Avg
+from django.conf import settings
 from .models import Teams, TeamRanking, Matchup, PlayerScore
+from .sleeper_api import get_league_teams
 
 
 def index(request):
-    """Main dashboard showing overview stats"""
+    """
+    Render the main dashboard with aggregated league overview statistics.
+    
+    Builds context containing total teams, total seasons, latest season, top teams by cumulative points, and recent champions, then renders the 'fantasyleague/index.html' template.
+    
+    Returns:
+        HttpResponse: Rendered dashboard page with the computed context.
+    """
     total_teams = Teams.objects.count()
     total_seasons = TeamRanking.objects.values('season').distinct().count()
     
@@ -32,30 +41,106 @@ def index(request):
 
 
 def team_list(request):
-    """Display all available fantasy league teams for selection"""
-    # Use bulk queries with annotations to avoid N+1 queries
-    teams = Teams.objects.annotate(
+    """
+    Builds and renders the team selection page by merging current Sleeper league data with historical database statistics and grouping teams by division.
+    
+    Fetches league teams from the configured Sleeper league (if present), augments each team with aggregated historical stats from the local database (wins, losses, championships, best rank, seasons played), and groups the combined team records by division when divisions are present. Safe fallbacks are used when league configuration, Sleeper fields, or database records are missing; team entries include a `has_db_record` flag and a `team_id` suitable for linking to the team detail page.
+    
+    Returns:
+        HttpResponse: Rendered 'fantasyleague/team_list.html' response with context keys:
+            - teams_with_stats: list of combined team dictionaries with current and historical stats
+            - teams_by_division: mapping of division name to list of teams (or {'All Teams': [...]})
+            - has_divisions: boolean indicating whether divisions were detected
+    """
+    league_id = settings.SLEEPER_LEAGUE_ID
+    
+    # Fetch teams from Sleeper API
+    sleeper_teams = get_league_teams(league_id) if league_id else []
+    
+    # Also get database stats if available
+    db_teams = Teams.objects.annotate(
         total_wins=Sum('rankings__wins'),
         total_losses=Sum('rankings__losses'),
         championships=Count('rankings__id', filter=Q(rankings__championship=True)),
         seasons_played=Count('rankings__id', distinct=True),
         best_rank=Min('rankings__rank')
-    ).order_by('team_name')
+    )
     
-    # Build teams_with_stats list from annotated queryset
-    teams_with_stats = []
-    for team in teams:
-        teams_with_stats.append({
-            'team': team,
+    # Create a mapping of user_id to database stats
+    db_stats_by_user = {}
+    for team in db_teams:
+        db_stats_by_user[team.user_id] = {
             'total_wins': team.total_wins or 0,
             'total_losses': team.total_losses or 0,
             'championships': team.championships or 0,
             'best_rank': team.best_rank or 0,
             'seasons_played': team.seasons_played or 0,
+        }
+    
+    # Create a mapping of user_id to Teams model for linking
+    db_teams_by_user = {team.user_id: team for team in Teams.objects.all()}
+    
+    # Combine Sleeper API data with database stats
+    teams_with_stats = []
+    divisions = set()
+    
+    for sleeper_team in sleeper_teams:
+        user_id = sleeper_team.get('user_id')
+        # Try to convert user_id to int for matching, handle both formats
+        user_id_int = None
+        if user_id:
+            try:
+                user_id_int = int(user_id)
+            except (ValueError, TypeError):
+                pass
+        
+        db_stats = db_stats_by_user.get(user_id_int, {}) if user_id_int else {}
+        db_team = db_teams_by_user.get(user_id_int) if user_id_int else None
+        
+        division = sleeper_team.get('division')
+        if division:
+            divisions.add(division)
+        
+        # Use database team_id if available, otherwise use roster_id
+        team_id = db_team.team_id if db_team else sleeper_team.get('roster_id')
+        
+        teams_with_stats.append({
+            'team_name': sleeper_team.get('team_name', 'Unknown Team'),
+            'display_name': sleeper_team.get('display_name', ''),
+            'username': sleeper_team.get('username', ''),
+            'avatar_url': sleeper_team.get('avatar_url', ''),
+            'roster_id': sleeper_team.get('roster_id'),
+            'user_id': user_id,
+            'team_id': team_id,  # For linking to team_detail
+            'division': division,
+            'current_wins': sleeper_team.get('wins', 0),
+            'current_losses': sleeper_team.get('losses', 0),
+            'current_ties': sleeper_team.get('ties', 0),
+            'current_points': sleeper_team.get('total_points', 0),
+            # Historical stats from database
+            'total_wins': db_stats.get('total_wins', 0),
+            'total_losses': db_stats.get('total_losses', 0),
+            'championships': db_stats.get('championships', 0),
+            'best_rank': db_stats.get('best_rank', 0),
+            'seasons_played': db_stats.get('seasons_played', 0),
+            'has_db_record': db_team is not None,
         })
+    
+    # Group by division if divisions exist
+    teams_by_division = {}
+    if divisions:
+        for team in teams_with_stats:
+            div = team.get('division') or 'No Division'
+            if div not in teams_by_division:
+                teams_by_division[div] = []
+            teams_by_division[div].append(team)
+    else:
+        teams_by_division = {'All Teams': teams_with_stats}
     
     context = {
         'teams_with_stats': teams_with_stats,
+        'teams_by_division': teams_by_division,
+        'has_divisions': len(divisions) > 0,
     }
     return render(request, 'fantasyleague/team_list.html', context)
 

@@ -1,0 +1,91 @@
+{% extends 'fantasyleague/base.html' %}
+
+{% block title %}{{ team.team_name }} - Insights{% endblock %}
+
+{% block content %}
+<div class="team-insights">
+    <h1>{{ team.team_name }} - Historical Insights</h1>
+    
+    <div class="breadcrumb">
+        <a href="{% url 'fantasyleague:team_list' %}">Teams</a> &gt;
+        <a href="{% url 'fantasyleague:team_detail' team.team_id %}">{{ team.team_name }}</a> &gt;
+        <span>Insights</span>
+    </div>
+    
+    <section class="section">
+        <h2>Season-by-Season Performance</h2>
+        <div class="performance-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Season</th>
+                        <th>Rank</th>
+                        <th>Wins</th>
+                        <th>Losses</th>
+                        <th>Total Points</th>
+                        <th>Avg Points</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for perf in season_performance %}
+                    <tr>
+                        <td>{{ perf.season }}</td>
+                        <td><strong>#{{ perf.rank }}</strong></td>
+                        <td>{{ perf.wins }}</td>
+                        <td>{{ perf.losses }}</td>
+                        <td>{{ perf.total_points|floatformat:2 }}</td>
+                        <td>{{ perf.average_points|floatformat:2 }}</td>
+                        <td>
+                            {% if perf.championship %}
+                                <span class="badge badge-gold">Champion</span>
+                            {% elif perf.playoff %}
+                                <span class="badge badge-blue">Playoffs</span>
+                            {% else %}
+                                <span class="badge">Regular Season</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7">No performance data available.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    
+    {% if top_players %}
+    <section class="section">
+        <h2>Top Players (All Time)</h2>
+        <div class="players-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Player Name</th>
+                        <th>Total Points</th>
+                        <th>Games</th>
+                        <th>Avg Points</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for player in top_players %}
+                    <tr>
+                        <td>{{ player.player_name }}</td>
+                        <td>{{ player.total_points|floatformat:2 }}</td>
+                        <td>{{ player.games }}</td>
+                        <td>{{ player.avg_points|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+    
+    <div class="action-links">
+        <a href="{% url 'fantasyleague:team_detail' team.team_id %}" class="btn btn-secondary">Back to Team Details</a>
+    </div>
+</div>
+{% endblock %}

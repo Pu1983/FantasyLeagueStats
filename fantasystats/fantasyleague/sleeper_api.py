@@ -1,0 +1,177 @@
+"""
+Utility functions for interacting with the Sleeper API
+"""
+import requests
+from django.conf import settings
+from typing import Dict, List, Optional
+
+
+SLEEPER_API_BASE = "https://api.sleeper.app/v1"
+
+
+def get_league_info(league_id: str) -> Optional[Dict]:
+    """
+    Retrieve league metadata for the given Sleeper league identifier.
+    
+    Returns:
+        dict: Parsed league JSON on success, or `None` if `league_id` is falsy or the request or JSON parsing fails.
+    """
+    if not league_id:
+        return None
+    
+    try:
+        response = requests.get(f"{SLEEPER_API_BASE}/league/{league_id}", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except (requests.RequestException, ValueError) as e:
+        print(f"Error fetching league info: {e}")
+        return None
+
+
+def get_league_users(league_id: str) -> List[Dict]:
+    """
+    Fetch all users in a Sleeper league.
+    
+    Returns:
+        List[Dict]: List of user objects returned by the Sleeper API. Returns an empty list if `league_id` is falsy or if a request/parse error occurs.
+    """
+    if not league_id:
+        return []
+    
+    try:
+        response = requests.get(f"{SLEEPER_API_BASE}/league/{league_id}/users", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except (requests.RequestException, ValueError) as e:
+        print(f"Error fetching league users: {e}")
+        return []
+
+
+def get_league_rosters(league_id: str) -> List[Dict]:
+    """
+    Fetch all rosters for the given league from the Sleeper API.
+    
+    Returns:
+        List[Dict]: A list of roster objects parsed from the API response. Returns an empty list if `league_id` is falsy or if the request or response parsing fails.
+    """
+    if not league_id:
+        return []
+    
+    try:
+        response = requests.get(f"{SLEEPER_API_BASE}/league/{league_id}/rosters", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except (requests.RequestException, ValueError) as e:
+        print(f"Error fetching league rosters: {e}")
+        return []
+
+
+def get_team_avatar_url(avatar_id: str, thumbnail: bool = True) -> str:
+    """
+    Build the Sleeper CDN URL for a team's or user's avatar.
+    
+    Parameters:
+        avatar_id (str): Sleeper avatar identifier.
+        thumbnail (bool): If True, return the thumbnail URL; otherwise return the full-size URL.
+    
+    Returns:
+        str: The avatar URL, or an empty string if `avatar_id` is empty.
+    """
+    if not avatar_id:
+        return ""
+    
+    if thumbnail:
+        return f"https://sleepercdn.com/avatars/thumbs/{avatar_id}"
+    return f"https://sleepercdn.com/avatars/{avatar_id}"
+
+
+def get_league_teams(league_id: str) -> List[Dict]:
+    """
+    Assemble team entries for a Sleeper league by combining league users and rosters.
+    
+    Each returned team dictionary contains metadata for a single roster, including:
+    `user_id`, `username`, `display_name`, `team_name`, `avatar`, `avatar_url`,
+    `roster_id`, `division` (if available), `wins`, `losses`, `ties`, `fpts`,
+    `fpts_decimal`, and `total_points` (calculated as `fpts + fpts_decimal/100`).
+    
+    Returns:
+        teams (List[Dict]): A list of team dictionaries described above; empty if
+        `league_id` is falsy or data cannot be retrieved.
+    """
+    if not league_id:
+        return []
+    
+    # Fetch league info to check for divisions
+    league_info = get_league_info(league_id)
+    divisions = []
+    if league_info and league_info.get('settings'):
+        # Divisions can be stored as a list of division names
+        divisions_raw = league_info.get('settings', {}).get('divisions', [])
+        if divisions_raw:
+            # If it's a list of strings, use it directly
+            if isinstance(divisions_raw, list) and divisions_raw and isinstance(divisions_raw[0], str):
+                divisions = divisions_raw
+            # If it's a number, create default division names
+            elif isinstance(divisions_raw, (int, float)):
+                divisions = [f"Division {i+1}" for i in range(int(divisions_raw))]
+    
+    # Fetch users and rosters
+    users = get_league_users(league_id)
+    rosters = get_league_rosters(league_id)
+    
+    # Create a mapping of owner_id to roster
+    roster_by_owner = {roster['owner_id']: roster for roster in rosters if roster.get('owner_id')}
+    
+    # Combine user and roster data
+    teams = []
+    for user in users:
+        user_id = user.get('user_id')
+        if not user_id:
+            continue
+        
+        roster = roster_by_owner.get(user_id)
+        if not roster:
+            continue
+        
+        # Get team name from metadata or use display_name
+        metadata = user.get('metadata', {}) or {}
+        team_name = metadata.get('team_name') or user.get('display_name') or user.get('username', 'Unknown Team')
+        
+        # Get division if available
+        division = None
+        if divisions and roster.get('settings'):
+            # Some leagues store division number (0-indexed) in roster settings
+            division_num = roster.get('settings', {}).get('division', None)
+            if division_num is not None:
+                try:
+                    division_num = int(division_num)
+                    if 0 <= division_num < len(divisions):
+                        division = divisions[division_num]
+                except (ValueError, TypeError):
+                    pass
+        
+        team_data = {
+            'user_id': user_id,
+            'username': user.get('username', ''),
+            'display_name': user.get('display_name', ''),
+            'team_name': team_name,
+            'avatar': user.get('avatar', ''),
+            'avatar_url': get_team_avatar_url(user.get('avatar', '')),
+            'roster_id': roster.get('roster_id'),
+            'division': division,
+            'wins': roster.get('settings', {}).get('wins', 0),
+            'losses': roster.get('settings', {}).get('losses', 0),
+            'ties': roster.get('settings', {}).get('ties', 0),
+            'fpts': roster.get('settings', {}).get('fpts', 0),
+            'fpts_decimal': roster.get('settings', {}).get('fpts_decimal', 0),
+            'total_points': roster.get('settings', {}).get('fpts', 0) + (roster.get('settings', {}).get('fpts_decimal', 0) / 100),
+        }
+        teams.append(team_data)
+    
+    # Sort by division if available, then by team name
+    if divisions:
+        teams.sort(key=lambda x: (x['division'] or '', x['team_name']))
+    else:
+        teams.sort(key=lambda x: x['team_name'])
+    
+    return teams
