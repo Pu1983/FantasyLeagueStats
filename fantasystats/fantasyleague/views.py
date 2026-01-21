@@ -53,9 +53,11 @@ def team_list(request):
             - has_divisions: boolean indicating whether divisions were detected
     """
     league_id = settings.SLEEPER_LEAGUE_ID
+    print(f"DEBUG: team_list using league_id: {league_id}")
     
     # Fetch teams from Sleeper API
     sleeper_teams = get_league_teams(league_id) if league_id else []
+    print(f"DEBUG: Fetched {len(sleeper_teams)} teams from Sleeper API")
     
     # Also get database stats if available
     db_teams = Teams.objects.annotate(
@@ -156,11 +158,26 @@ def team_detail(request, team_id):
     if league_id:
         try:
             roster_id = int(team_id)
+            print(f"DEBUG: team_detail called with team_id={team_id}, converted to roster_id={roster_id}")
             sleeper_team = get_team_by_roster_id(league_id, roster_id)
+            print(f"DEBUG: sleeper_team found: {sleeper_team is not None}")
             if sleeper_team:
-                roster_players = get_roster_players(league_id, roster_id)
-        except (ValueError, TypeError):
+                try:
+                    print(f"DEBUG: Fetching roster players for roster_id={roster_id}")
+                    roster_players = get_roster_players(league_id, roster_id)
+                    print(f"DEBUG: Got {len(roster_players)} roster players")
+                except Exception as e:
+                    print(f"Error fetching roster players: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    roster_players = []  # Continue with empty roster
+        except (ValueError, TypeError) as e:
+            print(f"Error converting team_id to roster_id: {e}")
             pass
+        except Exception as e:
+            print(f"Unexpected error in team_detail (Sleeper): {e}")
+            import traceback
+            traceback.print_exc()
     
     # If not found in Sleeper, try database
     db_team = None

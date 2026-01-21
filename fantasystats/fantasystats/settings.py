@@ -24,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True  # Set to False in production
 
 ALLOWED_HOSTS = ['*']
 
@@ -123,6 +123,15 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Sleeper League Configuration
 SLEEPER_LEAGUE_ID = config('SLEEPER_LEAGUE_ID', default='', cast=str)
+SLEEPER_PLAYERS_CACHE_TTL = config('SLEEPER_PLAYERS_CACHE_TTL', default=86400, cast=int)  # 24 hours
+
+# Cache configuration
+# https://docs.djangoproject.com/en/4.2/topics/cache/
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    }
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field

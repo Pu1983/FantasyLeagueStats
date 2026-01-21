@@ -1,6 +1,6 @@
 {% extends 'fantasyleague/base.html' %}
 
-{% block title %}{{ team_name|default:team.team_name }} - Fantasy League Stats{% endblock %}
+{% block title %}{% if from_sleeper %}{{ team_name }}{% else %}{{ team.team_name }}{% endif %} - Fantasy League Stats{% endblock %}
 
 {% block content %}
 <div class="team-detail">
@@ -209,13 +209,11 @@
     </section>
     
     <div class="action-links">
+        {% if not from_sleeper %}
         <a href="{% url 'fantasyleague:team_insights' team.team_id %}" class="btn btn-primary">View Team Insights</a>
+        {% endif %}
         <a href="{% url 'fantasyleague:team_list' %}" class="btn btn-secondary">Back to Teams</a>
     </div>
     {% endif %}
-    
-    <div class="action-links">
-        <a href="{% url 'fantasyleague:team_list' %}" class="btn btn-secondary">Back to Teams</a>
-    </div>
 </div>
 {% endblock %}

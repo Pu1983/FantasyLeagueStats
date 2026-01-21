@@ -3,10 +3,14 @@ Utility functions for interacting with the Sleeper API
 """
 import requests
 from django.conf import settings
+from django.core.cache import cache
 from typing import Dict, List, Optional
 
 
 SLEEPER_API_BASE = "https://api.sleeper.app/v1"
+SLEEPER_PLAYERS_CACHE_KEY = "sleeper_players"
+# Cache players data for 24 hours (86400 seconds) - players data changes infrequently
+SLEEPER_PLAYERS_CACHE_TTL = getattr(settings, 'SLEEPER_PLAYERS_CACHE_TTL', 86400)
 
 
 def safe_int(value, default=0):
@@ -89,14 +93,42 @@ def get_league_rosters(league_id: str) -> List[Dict]:
 def get_players() -> Dict:
     """
     Fetch all NFL players from Sleeper API.
-    Note: This should be cached as it's a large dataset (~5MB).
+    Uses Django cache to avoid repeated fetches of the large dataset (~5MB).
+    Cache TTL is configurable via SLEEPER_PLAYERS_CACHE_TTL setting (default: 24 hours).
     """
+    # Check cache first
+    cached_players = cache.get(SLEEPER_PLAYERS_CACHE_KEY)
+    if cached_players is not None:
+        print(f"DEBUG: Returning cached players data ({len(cached_players)} players)")
+        return cached_players
+    
+    # Cache miss - fetch from API
+    print("DEBUG: Cache miss - fetching players data from Sleeper API...")
     try:
-        response = requests.get(f"{SLEEPER_API_BASE}/players/nfl", timeout=30)
+        response = requests.get(f"{SLEEPER_API_BASE}/players/nfl", timeout=60)
         response.raise_for_status()
-        return response.json()
+        players_data = response.json()
+        
+        # Cache the successful response
+        cache.set(SLEEPER_PLAYERS_CACHE_KEY, players_data, SLEEPER_PLAYERS_CACHE_TTL)
+        print(f"DEBUG: Cached players data ({len(players_data)} players) for {SLEEPER_PLAYERS_CACHE_TTL} seconds")
+        
+        return players_data
+    except requests.Timeout:
+        print("Timeout fetching players data (this is a large dataset)")
+        # Don't cache error responses
+        return {}
     except (requests.RequestException, ValueError) as e:
         print(f"Error fetching players: {e}")
+        import traceback
+        traceback.print_exc()
+        # Don't cache error responses
+        return {}
+    except Exception as e:
+        print(f"Unexpected error fetching players: {e}")
+        import traceback
+        traceback.print_exc()
+        # Don't cache error responses
         return {}
 
 
@@ -120,6 +152,10 @@ def get_team_avatar_url(avatar_id: str, thumbnail: bool = True) -> str:
 
 
 def get_league_teams(league_id: str) -> List[Dict]:
+    """Fetch and combine league users and rosters to get team information.
+    
+    Note: This function makes fresh API calls each time - no caching.
+    """
     """
     Assemble team entries for a Sleeper league by combining league users and rosters.
     
@@ -133,7 +169,10 @@ def get_league_teams(league_id: str) -> List[Dict]:
         `league_id` is falsy or data cannot be retrieved.
     """
     if not league_id:
+        print(f"DEBUG: get_league_teams called with empty league_id")
         return []
+    
+    print(f"DEBUG: get_league_teams fetching data for league_id: {league_id}")
     
     # Fetch league info to check for divisions
     league_info = get_league_info(league_id)
@@ -223,6 +262,7 @@ def get_league_teams(league_id: str) -> List[Dict]:
     else:
         teams.sort(key=lambda x: x['team_name'])
     
+    print(f"DEBUG: get_league_teams returning {len(teams)} teams for league_id: {league_id}")
     return teams
 
 
@@ -233,7 +273,9 @@ def get_team_by_roster_id(league_id: str, roster_id: int) -> Optional[Dict]:
     
     teams = get_league_teams(league_id)
     for team in teams:
-        if team.get('roster_id') == roster_id:
+        # Handle both int and string roster_id comparisons
+        team_roster_id = team.get('roster_id')
+        if team_roster_id == roster_id or str(team_roster_id) == str(roster_id):
             return team
     return None
 
@@ -243,29 +285,80 @@ def get_roster_players(league_id: str, roster_id: int) -> List[Dict]:
     if not league_id or roster_id is None:
         return []
     
-    rosters = get_league_rosters(league_id)
-    for roster in rosters:
-        if roster.get('roster_id') == roster_id:
-            player_ids = roster.get('players', [])
-            starters = roster.get('starters', [])
-            reserve = roster.get('reserve', [])
-            
-            # Fetch player data
-            players_data = get_players()
-            
-            roster_players = []
-            for player_id in player_ids:
-                player_info = players_data.get(str(player_id), {})
-                if player_info:
-                    roster_players.append({
-                        'player_id': player_id,
-                        'name': f"{player_info.get('first_name', '')} {player_info.get('last_name', '')}".strip(),
-                        'position': player_info.get('position', ''),
-                        'team': player_info.get('team', ''),
-                        'is_starter': player_id in starters,
-                        'is_reserve': player_id in reserve,
-                    })
-            
-            return roster_players
-    
-    return []
+    try:
+        rosters = get_league_rosters(league_id)
+        print(f"DEBUG: Looking for roster_id={roster_id}, found {len(rosters)} rosters")
+        
+        for roster in rosters:
+            # Handle both int and string roster_id comparisons
+            roster_id_from_api = roster.get('roster_id')
+            if roster_id_from_api == roster_id or str(roster_id_from_api) == str(roster_id):
+                player_ids = roster.get('players', [])
+                starters = roster.get('starters', [])
+                reserve = roster.get('reserve', [])
+                
+                print(f"DEBUG: Found roster with {len(player_ids)} players, {len(starters)} starters, {len(reserve)} reserve")
+                print(f"DEBUG: player_ids empty? {not player_ids}, starters exists? {bool(starters)}")
+                
+                # If players list is empty but we have starters, use starters + reserve as the player list
+                # Check explicitly for empty list and non-empty starters
+                if len(player_ids) == 0 and len(starters) > 0:
+                    print(f"DEBUG: players list is empty, using starters and reserve as player list")
+                    # Combine starters and reserve, removing duplicates
+                    all_player_ids = list(set(starters + reserve))
+                    player_ids = all_player_ids
+                    print(f"DEBUG: Combined player list has {len(player_ids)} players")
+                elif not player_ids:
+                    print(f"DEBUG: WARNING - No players and no starters found in roster!")
+                
+                # Convert all to strings for consistent comparison
+                starters_set = {str(s) for s in starters}
+                reserve_set = {str(r) for r in reserve}
+                
+                # Fetch player data (this is a large call, might be slow)
+                players_data = {}
+                try:
+                    print("DEBUG: Fetching players data...")
+                    players_data = get_players()
+                    print(f"DEBUG: Fetched {len(players_data)} players")
+                except Exception as e:
+                    print(f"Error fetching players data: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # Continue without player data - we'll show player IDs
+                
+                roster_players = []
+                for player_id in player_ids:
+                    player_id_str = str(player_id)
+                    player_info = players_data.get(player_id_str, {}) if players_data else {}
+                    
+                    # If player info not found, still add player with minimal info
+                    if not player_info:
+                        roster_players.append({
+                            'player_id': player_id,
+                            'name': f"Player {player_id}",
+                            'position': '',
+                            'team': '',
+                            'is_starter': player_id_str in starters_set,
+                            'is_reserve': player_id_str in reserve_set,
+                        })
+                    else:
+                        roster_players.append({
+                            'player_id': player_id,
+                            'name': f"{player_info.get('first_name', '')} {player_info.get('last_name', '')}".strip() or f"Player {player_id}",
+                            'position': player_info.get('position', ''),
+                            'team': player_info.get('team', ''),
+                            'is_starter': player_id_str in starters_set,
+                            'is_reserve': player_id_str in reserve_set,
+                        })
+                
+                print(f"DEBUG: Returning {len(roster_players)} roster players")
+                return roster_players
+        
+        print(f"DEBUG: Roster with id {roster_id} not found")
+        return []
+    except Exception as e:
+        print(f"Error in get_roster_players: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
