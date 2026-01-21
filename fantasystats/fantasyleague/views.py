@@ -33,24 +33,25 @@ def index(request):
 
 def team_list(request):
     """Display all available fantasy league teams for selection"""
-    teams = Teams.objects.all().order_by('team_name')
+    # Use bulk queries with annotations to avoid N+1 queries
+    teams = Teams.objects.annotate(
+        total_wins=Sum('rankings__wins'),
+        total_losses=Sum('rankings__losses'),
+        championships=Count('rankings__id', filter=Q(rankings__championship=True)),
+        seasons_played=Count('rankings__id', distinct=True),
+        best_rank=Min('rankings__rank')
+    ).order_by('team_name')
     
-    # Get summary stats for each team
+    # Build teams_with_stats list from annotated queryset
     teams_with_stats = []
     for team in teams:
-        rankings = TeamRanking.objects.filter(team=team).order_by('-season')
-        total_wins = sum(r.wins for r in rankings)
-        total_losses = sum(r.losses for r in rankings)
-        championships = rankings.filter(championship=True).count()
-        best_rank = rankings.aggregate(Max('rank'))['rank__max'] or 0
-        
         teams_with_stats.append({
             'team': team,
-            'total_wins': total_wins,
-            'total_losses': total_losses,
-            'championships': championships,
-            'best_rank': best_rank,
-            'seasons_played': rankings.count(),
+            'total_wins': team.total_wins or 0,
+            'total_losses': team.total_losses or 0,
+            'championships': team.championships or 0,
+            'best_rank': team.best_rank or 0,
+            'seasons_played': team.seasons_played or 0,
         })
     
     context = {
@@ -72,8 +73,8 @@ def team_detail(request, team_id):
     total_wins = sum(r.wins for r in rankings)
     total_losses = sum(r.losses for r in rankings)
     total_ties = sum(r.ties for r in rankings)
-    best_rank = rankings.aggregate(Max('rank'))['rank__max'] or 0
-    worst_rank = rankings.aggregate(Min('rank'))['rank__min'] or 0
+    best_rank = rankings.aggregate(Min('rank'))['rank__min'] or 0
+    worst_rank = rankings.aggregate(Max('rank'))['rank__max'] or 0
     
     # Get highest match score
     team1_matchups = Matchup.objects.filter(team1=team)
@@ -133,10 +134,6 @@ def team_insights(request, team_id):
     # Calculate season-by-season performance
     season_performance = []
     for ranking in rankings:
-        season_matchups = all_matchups.filter(season=ranking.season)
-        season_wins = sum(1 for m in season_matchups if (m.team1 == team and m.team1_score > m.team2_score) or (m.team2 == team and m.team2_score > m.team1_score))
-        season_losses = sum(1 for m in season_matchups if (m.team1 == team and m.team1_score < m.team2_score) or (m.team2 == team and m.team2_score < m.team1_score))
-        
         season_performance.append({
             'season': ranking.season,
             'rank': ranking.rank,
