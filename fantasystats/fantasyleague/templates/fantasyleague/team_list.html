@@ -62,8 +62,6 @@
                     </div>
                     {% if team_stat.team_id %}
                     <a href="{% url 'fantasyleague:team_detail' team_stat.team_id %}" class="btn btn-secondary">View Details</a>
-                    {% elif team_stat.has_db_record %}
-                    <a href="{% url 'fantasyleague:team_detail' team_stat.team_id %}" class="btn btn-secondary">View Details</a>
                     {% else %}
                     <span class="btn btn-secondary" style="opacity: 0.5; cursor: not-allowed;">No Historical Data</span>
                     {% endif %}
