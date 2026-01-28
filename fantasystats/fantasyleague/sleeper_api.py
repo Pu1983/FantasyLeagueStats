@@ -312,9 +312,9 @@ def get_roster_players(league_id: str, roster_id: int) -> List[Dict]:
             # Handle both int and string roster_id comparisons
             roster_id_from_api = roster.get('roster_id')
             if roster_id_from_api == roster_id or str(roster_id_from_api) == str(roster_id):
-                player_ids = roster.get('players', [])
-                starters = roster.get('starters', [])
-                reserve = roster.get('reserve', [])
+                player_ids = roster.get('players') or []
+                starters = roster.get('starters') or []
+                reserve = roster.get('reserve') or []
                 
                 print(f"DEBUG: Found roster with {len(player_ids)} players, {len(starters)} starters, {len(reserve)} reserve")
                 print(f"DEBUG: player_ids empty? {not player_ids}, starters exists? {bool(starters)}")
