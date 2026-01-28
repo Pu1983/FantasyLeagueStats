@@ -1,9 +1,97 @@
 {% extends 'fantasyleague/base.html' %}
 
-{% block title %}{{ team.team_name }} - Fantasy League Stats{% endblock %}
+{% block title %}{% if from_sleeper %}{{ team_name }}{% else %}{{ team.team_name }}{% endif %} - Fantasy League Stats{% endblock %}
 
 {% block content %}
 <div class="team-detail">
+    {% if from_sleeper %}
+    {# Sleeper API Team View #}
+    <div class="team-header-sleeper">
+        {% if avatar_url %}
+        <div class="team-logo-large">
+            <img src="{{ avatar_url }}" alt="{{ team_name }} logo" class="team-avatar-large">
+        </div>
+        {% endif %}
+        <div class="team-info-main">
+            <h1>{{ team_name }}</h1>
+            {% if division %}
+            <p class="division-badge">Division: {{ division }}</p>
+            {% endif %}
+            <div class="current-record">
+                <span class="record-text">{{ current_wins }}-{{ current_losses }}{% if current_ties %}-{{ current_ties }}{% endif %}</span>
+                <span class="points-text">{{ current_points|floatformat:2 }} points</span>
+            </div>
+        </div>
+    </div>
+    
+    <section class="section">
+        <h2>Current Roster</h2>
+        {% if starters or bench or reserve %}
+        <div class="roster-container">
+            {% if starters %}
+            <div class="roster-section">
+                <h3>Starters</h3>
+                <div class="roster-grid">
+                    {% for player in starters %}
+                    <div class="player-card starter">
+                        <div class="player-name">{{ player.name }}</div>
+                        <div class="player-info">
+                            <span class="player-position">{{ player.position }}</span>
+                            {% if player.team %}
+                            <span class="player-team">{{ player.team }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if bench %}
+            <div class="roster-section">
+                <h3>Bench</h3>
+                <div class="roster-grid">
+                    {% for player in bench %}
+                    <div class="player-card">
+                        <div class="player-name">{{ player.name }}</div>
+                        <div class="player-info">
+                            <span class="player-position">{{ player.position }}</span>
+                            {% if player.team %}
+                            <span class="player-team">{{ player.team }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if reserve %}
+            <div class="roster-section">
+                <h3>Reserve/IR</h3>
+                <div class="roster-grid">
+                    {% for player in reserve %}
+                    <div class="player-card reserve">
+                        <div class="player-name">{{ player.name }}</div>
+                        <div class="player-info">
+                            <span class="player-position">{{ player.position }}</span>
+                            {% if player.team %}
+                            <span class="player-team">{{ player.team }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <p>No roster data available.</p>
+        {% endif %}
+    </section>
+    
+    {% else %}
+    {# Database Team View (Historical) #}
     <h1>{{ team.team_name }}</h1>
     
     <div class="team-header">
@@ -121,8 +209,11 @@
     </section>
     
     <div class="action-links">
+        {% if not from_sleeper %}
         <a href="{% url 'fantasyleague:team_insights' team.team_id %}" class="btn btn-primary">View Team Insights</a>
+        {% endif %}
         <a href="{% url 'fantasyleague:team_list' %}" class="btn btn-secondary">Back to Teams</a>
     </div>
+    {% endif %}
 </div>
 {% endblock %}

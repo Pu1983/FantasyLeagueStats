@@ -2,7 +2,7 @@ from django.shortcuts import render, get_object_or_404
 from django.db.models import Max, Min, Sum, Q, Count, Avg
 from django.conf import settings
 from .models import Teams, TeamRanking, Matchup, PlayerScore
-from .sleeper_api import get_league_teams
+from .sleeper_api import get_league_teams, get_team_by_roster_id, get_roster_players
 
 
 def index(request):
@@ -53,9 +53,11 @@ def team_list(request):
             - has_divisions: boolean indicating whether divisions were detected
     """
     league_id = settings.SLEEPER_LEAGUE_ID
+    print(f"DEBUG: team_list using league_id: {league_id}")
     
     # Fetch teams from Sleeper API
     sleeper_teams = get_league_teams(league_id) if league_id else []
+    print(f"DEBUG: Fetched {len(sleeper_teams)} teams from Sleeper API")
     
     # Also get database stats if available
     db_teams = Teams.objects.annotate(
@@ -130,10 +132,20 @@ def team_list(request):
     teams_by_division = {}
     if divisions:
         for team in teams_with_stats:
-            div = team.get('division') or 'No Division'
-            if div not in teams_by_division:
-                teams_by_division[div] = []
-            teams_by_division[div].append(team)
+            div = team.get('division')
+            # Only group teams that have a division assigned
+            if div:
+                if div not in teams_by_division:
+                    teams_by_division[div] = []
+                teams_by_division[div].append(team)
+            else:
+                teams_by_division.setdefault("Unassigned", []).append(team)
+                # Log teams without division for debugging
+                print(f"DEBUG: Team {team.get('team_name')} has no division assigned")
+        
+        # Sort divisions alphabetically
+        sorted_divisions = sorted(teams_by_division.items(), key=lambda x: x[0])
+        teams_by_division = dict(sorted_divisions)
     else:
         teams_by_division = {'All Teams': teams_with_stats}
     
@@ -147,61 +159,127 @@ def team_list(request):
 
 def team_detail(request, team_id):
     """Individual fantasy team detail page"""
-    team = get_object_or_404(Teams, pk=team_id)
+    league_id = settings.SLEEPER_LEAGUE_ID
     
-    # Get all rankings for this team
-    rankings = TeamRanking.objects.filter(team=team).order_by('-season')
+    # Try to get team from Sleeper API first (by roster_id)
+    sleeper_team = None
+    roster_players = []
     
-    # Calculate achievements
-    championships = rankings.filter(championship=True).count()
-    playoff_appearances = rankings.filter(playoff_appearance=True).count()
-    total_wins = sum(r.wins for r in rankings)
-    total_losses = sum(r.losses for r in rankings)
-    total_ties = sum(r.ties for r in rankings)
-    best_rank = rankings.aggregate(Min('rank'))['rank__min'] or 0
-    worst_rank = rankings.aggregate(Max('rank'))['rank__max'] or 0
+    if league_id:
+        try:
+            roster_id = int(team_id)
+            print(f"DEBUG: team_detail called with team_id={team_id}, converted to roster_id={roster_id}")
+            sleeper_team = get_team_by_roster_id(league_id, roster_id)
+            print(f"DEBUG: sleeper_team found: {sleeper_team is not None}")
+            if sleeper_team:
+                try:
+                    print(f"DEBUG: Fetching roster players for roster_id={roster_id}")
+                    roster_players = get_roster_players(league_id, roster_id)
+                    print(f"DEBUG: Got {len(roster_players)} roster players")
+                except Exception as e:
+                    print(f"Error fetching roster players: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    roster_players = []  # Continue with empty roster
+        except (ValueError, TypeError) as e:
+            print(f"Error converting team_id to roster_id: {e}")
+            pass
+        except Exception as e:
+            print(f"Unexpected error in team_detail (Sleeper): {e}")
+            import traceback
+            traceback.print_exc()
     
-    # Get highest match score
-    team1_matchups = Matchup.objects.filter(team1=team)
-    team2_matchups = Matchup.objects.filter(team2=team)
+    # If not found in Sleeper, try database
+    db_team = None
+    rankings = []
+    if not sleeper_team:
+        try:
+            db_team = Teams.objects.get(pk=team_id)
+            # Get all rankings for this team
+            rankings = TeamRanking.objects.filter(team=db_team).order_by('-season')
+        except Teams.DoesNotExist:
+            pass
     
-    highest_match_score = None
-    highest_match = None
+    # If we have Sleeper team data, use it
+    if sleeper_team:
+        # Separate players by status
+        starters = [p for p in roster_players if p.get('is_starter')]
+        bench = [p for p in roster_players if not p.get('is_starter') and not p.get('is_reserve')]
+        reserve = [p for p in roster_players if p.get('is_reserve')]
+        
+        context = {
+            'team_name': sleeper_team.get('team_name', 'Unknown Team'),
+            'avatar_url': sleeper_team.get('avatar_url', ''),
+            'division': sleeper_team.get('division'),
+            'starters': starters,
+            'bench': bench,
+            'reserve': reserve,
+            'current_wins': sleeper_team.get('wins', 0),
+            'current_losses': sleeper_team.get('losses', 0),
+            'current_ties': sleeper_team.get('ties', 0),
+            'current_points': sleeper_team.get('total_points', 0),
+            'from_sleeper': True,
+        }
+        return render(request, 'fantasyleague/team_detail.html', context)
     
-    for matchup in team1_matchups:
-        if matchup.team1_score > (highest_match_score or 0):
-            highest_match_score = matchup.team1_score
-            highest_match = matchup
+    # Fallback to database team if available
+    if db_team:
+        # Calculate achievements
+        championships = rankings.filter(championship=True).count()
+        playoff_appearances = rankings.filter(playoff_appearance=True).count()
+        total_wins = sum(r.wins for r in rankings)
+        total_losses = sum(r.losses for r in rankings)
+        total_ties = sum(r.ties for r in rankings)
+        best_rank = rankings.aggregate(Min('rank'))['rank__min'] or 0
+        worst_rank = rankings.aggregate(Max('rank'))['rank__max'] or 0
+        
+        # Get highest match score
+        team1_matchups = Matchup.objects.filter(team1=db_team)
+        team2_matchups = Matchup.objects.filter(team2=db_team)
+        
+        highest_match_score = None
+        highest_match = None
+        
+        for matchup in team1_matchups:
+            if matchup.team1_score > (highest_match_score or 0):
+                highest_match_score = matchup.team1_score
+                highest_match = matchup
+        
+        for matchup in team2_matchups:
+            if matchup.team2_score > (highest_match_score or 0):
+                highest_match_score = matchup.team2_score
+                highest_match = matchup
+        
+        # Get highest individual player score
+        highest_player_score = PlayerScore.objects.filter(
+            team=db_team
+        ).order_by('-fantasy_points').first()
+        
+        # Get all matchups for this team
+        all_matchups = (team1_matchups | team2_matchups).order_by('-season', '-week')[:10]
+        
+        context = {
+            'team': db_team,
+            'team_name': db_team.team_name,
+            'rankings': rankings,
+            'championships': championships,
+            'playoff_appearances': playoff_appearances,
+            'total_wins': total_wins,
+            'total_losses': total_losses,
+            'total_ties': total_ties,
+            'best_rank': best_rank,
+            'worst_rank': worst_rank,
+            'highest_match': highest_match,
+            'highest_match_score': highest_match_score,
+            'highest_player_score': highest_player_score,
+            'recent_matchups': all_matchups,
+            'from_sleeper': False,
+        }
+        return render(request, 'fantasyleague/team_detail.html', context)
     
-    for matchup in team2_matchups:
-        if matchup.team2_score > (highest_match_score or 0):
-            highest_match_score = matchup.team2_score
-            highest_match = matchup
-    
-    # Get highest individual player score
-    highest_player_score = PlayerScore.objects.filter(
-        team=team
-    ).order_by('-fantasy_points').first()
-    
-    # Get all matchups for this team
-    all_matchups = (team1_matchups | team2_matchups).order_by('-season', '-week')[:10]
-    
-    context = {
-        'team': team,
-        'rankings': rankings,
-        'championships': championships,
-        'playoff_appearances': playoff_appearances,
-        'total_wins': total_wins,
-        'total_losses': total_losses,
-        'total_ties': total_ties,
-        'best_rank': best_rank,
-        'worst_rank': worst_rank,
-        'highest_match': highest_match,
-        'highest_match_score': highest_match_score,
-        'highest_player_score': highest_player_score,
-        'recent_matchups': all_matchups,
-    }
-    return render(request, 'fantasyleague/team_detail.html', context)
+    # Team not found
+    from django.http import Http404
+    raise Http404("Team not found")
 
 
 def team_insights(request, team_id):
