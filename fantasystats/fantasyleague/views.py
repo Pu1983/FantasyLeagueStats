@@ -132,10 +132,19 @@ def team_list(request):
     teams_by_division = {}
     if divisions:
         for team in teams_with_stats:
-            div = team.get('division') or 'No Division'
-            if div not in teams_by_division:
-                teams_by_division[div] = []
-            teams_by_division[div].append(team)
+            div = team.get('division')
+            # Only group teams that have a division assigned
+            if div:
+                if div not in teams_by_division:
+                    teams_by_division[div] = []
+                teams_by_division[div].append(team)
+            else:
+                # Log teams without division for debugging
+                print(f"DEBUG: Team {team.get('team_name')} has no division assigned")
+        
+        # Sort divisions alphabetically
+        sorted_divisions = sorted(teams_by_division.items(), key=lambda x: x[0])
+        teams_by_division = dict(sorted_divisions)
     else:
         teams_by_division = {'All Teams': teams_with_stats}
     

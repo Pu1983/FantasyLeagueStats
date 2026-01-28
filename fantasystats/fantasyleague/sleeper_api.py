@@ -212,16 +212,35 @@ def get_league_teams(league_id: str) -> List[Dict]:
         
         # Get division if available
         division = None
-        if divisions and roster.get('settings'):
-            # Some leagues store division number (0-indexed) in roster settings
-            division_num = roster.get('settings', {}).get('division', None)
+        if divisions:
+            # Check multiple possible locations for division number
+            division_num = None
+            
+            # Try roster settings first (most common location)
+            if roster.get('settings'):
+                division_num = roster.get('settings', {}).get('division', None)
+            
+            # If not found in settings, try roster level
+            if division_num is None:
+                division_num = roster.get('division', None)
+            
             if division_num is not None:
                 try:
                     division_num = int(division_num)
-                    if 0 <= division_num < len(divisions):
+                    # Try 1-indexed first
+                    if 1 <= division_num <= len(divisions):
+                        division = divisions[division_num - 1]
+                    # If that fails, fall back to 0-indexed
+                    elif 0 <= division_num < len(divisions):
                         division = divisions[division_num]
-                except (ValueError, TypeError):
+                    else:
+                        print(f"DEBUG: division_num {division_num} out of range for {len(divisions)} divisions")
+                except (ValueError, TypeError) as e:
+                    print(f"DEBUG: Error converting division_num: {e}")
                     pass
+            
+            if division is None and divisions:
+                print(f"DEBUG: Team {team_name} has no division assigned. Roster keys: {list(roster.keys())}, settings keys: {list(roster.get('settings', {}).keys())}")
         
         # Safely extract and convert numeric values from roster settings
         # Explicitly handle None values - .get() with defaults only protects against missing keys, not None
