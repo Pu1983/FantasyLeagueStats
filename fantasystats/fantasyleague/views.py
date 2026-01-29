@@ -2,7 +2,7 @@ from django.shortcuts import render, get_object_or_404
 from django.db.models import Max, Min, Sum, Q, Count, Avg
 from django.conf import settings
 from .models import Teams, TeamRanking, Matchup, PlayerScore
-from .sleeper_api import get_league_teams, get_team_by_roster_id, get_roster_players
+from .sleeper_api import get_league_teams, get_team_by_roster_id, get_roster_players, get_league_info
 
 
 def index(request):
@@ -14,16 +14,36 @@ def index(request):
     Returns:
         HttpResponse: Rendered dashboard page with the computed context.
     """
-    total_teams = Teams.objects.count()
-    total_seasons = TeamRanking.objects.values('season').distinct().count()
+    league_id = settings.SLEEPER_LEAGUE_ID
     
-    # Get latest season
-    latest_season = TeamRanking.objects.aggregate(Max('season'))['season__max']
+    # Get total teams from Sleeper API
+    sleeper_teams = get_league_teams(league_id) if league_id else []
+    total_teams = len(sleeper_teams)
+    
+    # Get current season from Sleeper API
+    current_season = None
+    if league_id:
+        league_info = get_league_info(league_id)
+        if league_info:
+            current_season = league_info.get('season')
+    
+    # Count finished seasons (seasons that are not the current season)
+    # If we have a current season, count all distinct seasons less than current
+    # Otherwise, count all distinct seasons except the current one if it exists
+    if current_season:
+        finished_seasons = TeamRanking.objects.filter(
+            season__lt=current_season
+        ).values('season').distinct().count()
+    else:
+        # Fallback: count all distinct seasons from database
+        all_seasons = TeamRanking.objects.values('season').distinct().count()
+        finished_seasons = all_seasons
     
     # Get top teams by total points across all seasons
+    latest_season_db = TeamRanking.objects.aggregate(Max('season'))['season__max']
     top_teams = Teams.objects.annotate(
         total_points=Sum('rankings__total_points')
-    ).order_by('-total_points')[:5] if latest_season else []
+    ).order_by('-total_points')[:5] if latest_season_db else []
     
     # Get recent champions
     recent_champions = TeamRanking.objects.filter(
@@ -32,8 +52,8 @@ def index(request):
     
     context = {
         'total_teams': total_teams,
-        'total_seasons': total_seasons,
-        'latest_season': latest_season,
+        'total_seasons': finished_seasons,
+        'current_season': current_season,
         'top_teams': top_teams,
         'recent_champions': recent_champions,
     }
