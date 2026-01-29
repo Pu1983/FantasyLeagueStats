@@ -159,6 +159,7 @@ def team_list(request):
                     teams_by_division[div] = []
                 teams_by_division[div].append(team)
             else:
+                teams_by_division.setdefault("Unassigned", []).append(team)
                 # Log teams without division for debugging
                 print(f"DEBUG: Team {team.get('team_name')} has no division assigned")
         
